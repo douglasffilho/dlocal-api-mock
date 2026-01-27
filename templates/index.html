@@ -1149,7 +1149,7 @@
             </div>
 
             <!-- Payments Overview -->
-            <div class="card">
+            <div class="card mb-4">
                 <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
                     <div style="display: flex; align-items: center; gap: 12px;">
                         <div class="card-icon">💳</div>
@@ -1163,6 +1163,25 @@
                 <div id="payments-overview-content" style="padding: 20px;">
                     <div class="payments-loading" style="text-align: center; padding: 40px; color: var(--text-muted);">
                         Loading payments...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Payouts Overview -->
+            <div class="card">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div class="card-icon">🏦</div>
+                        <h2 class="card-title">Payouts Overview</h2>
+                    </div>
+                    <button class="btn btn-secondary" onclick="refreshPayoutsOverview()">
+                        🔄 Refresh
+                    </button>
+                </div>
+                
+                <div id="payouts-overview-content" style="padding: 20px;">
+                    <div class="payouts-loading" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                        Loading payouts...
                     </div>
                 </div>
             </div>
@@ -2271,7 +2290,7 @@
                                     <div class="form-grid">
                                         <div class="form-group">
                                             <label>External ID <span class="required">*</span></label>
-                                            <input type="text" id="payout_external_id" placeholder="test-payout-001" value="test-remittance-validation-3">
+                                            <input type="text" id="payout_external_id" placeholder="PAYOUT-001">
                                         </div>
                                         <div class="form-group">
                                             <label>Country <span class="required">*</span></label>
@@ -2911,6 +2930,8 @@ headers = {
                                     <tr><td><span class="method-badge get">GET</span></td><td>/api/local/beneficiaries/approved</td><td>Get approved beneficiaries</td></tr>
                                     <tr><td><span class="method-badge get">GET</span></td><td>/api/local/payments</td><td>List all saved payments</td></tr>
                                     <tr><td><span class="method-badge delete">DEL</span></td><td>/api/local/payments/{id}</td><td>Delete payment</td></tr>
+                                    <tr><td><span class="method-badge get">GET</span></td><td>/api/local/payouts</td><td>List all saved payouts</td></tr>
+                                    <tr><td><span class="method-badge delete">DEL</span></td><td>/api/local/payouts/{id}</td><td>Delete payout</td></tr>
                                     <tr><td><span class="method-badge post">POST</span></td><td>/api/verifications</td><td>Create verification (proxy to dLocal)</td></tr>
                                     <tr><td><span class="method-badge post">POST</span></td><td>/api/payments</td><td>Create payment (proxy to dLocal)</td></tr>
                                     <tr><td><span class="method-badge post">POST</span></td><td>/api/payments/{id}</td><td>Get payment details (proxy to dLocal)</td></tr>
@@ -3090,6 +3111,11 @@ headers = {
                 'REJECTED': 'status-rejected',
                 'CREATED': 'status-created',
                 'PAID': 'status-paid',
+                'COMPLETED': 'status-approved',
+                'SUCCESS': 'status-approved',
+                'PROCESSING': 'status-pending',
+                'FAILED': 'status-rejected',
+                'ERROR': 'status-rejected',
             }[status] || 'status-unknown';
 
             const statusIcon = {
@@ -3097,7 +3123,12 @@ headers = {
                 'PENDING': '⏳',
                 'REJECTED': '✗',
                 'CREATED': '📝',
-                'PAID': '✓'
+                'PAID': '✓',
+                'COMPLETED': '✓',
+                'SUCCESS': '✓',
+                'PROCESSING': '⏳',
+                'FAILED': '✗',
+                'ERROR': '✗',
             }[status] || '?';
 
             return `<span class="status-chip ${statusClass}">${statusIcon} ${status || 'Unknown'}</span>`;
@@ -3390,6 +3421,136 @@ headers = {
 
             loadPaymentsOverview();
             showToast('success', 'All payments refreshed');
+        }
+
+        // ============================================
+        // PAYOUTS OVERVIEW FUNCTIONS
+        // ============================================
+        async function loadPayoutsOverview() {
+            const content = document.getElementById('payouts-overview-content');
+            content.innerHTML = '<div class="payouts-loading" style="text-align: center; padding: 40px; color: var(--text-muted);">Loading payouts...</div>';
+
+            try {
+                const response = await fetch('/api/local/payouts');
+                const payouts = await response.json();
+
+                if (!payouts || payouts.length === 0) {
+                    content.innerHTML = `
+                        <div class="overview-empty">
+                            <div style="font-size: 48px; margin-bottom: 16px;">🏦</div>
+                            <div style="font-size: 16px; margin-bottom: 8px;">No payouts yet</div>
+                            <div style="font-size: 13px;">Create a payout to get started</div>
+                        </div>`;
+                    return;
+                }
+
+                const stats = {
+                    total: payouts.length,
+                    completed: payouts.filter(p => p.status === 'COMPLETED' || p.status === 'SUCCESS').length,
+                    pending: payouts.filter(p => p.status === 'PENDING' || p.status === 'PROCESSING').length,
+                    failed: payouts.filter(p => p.status === 'REJECTED' || p.status === 'FAILED' || p.status === 'ERROR').length,
+                    totalAmount: payouts.filter(p => p.status === 'COMPLETED' || p.status === 'SUCCESS').reduce((sum, p) => sum + (p.amount || 0), 0)
+                };
+
+                content.innerHTML = `
+                    <div class="overview-stats">
+                        <div class="stat-card">
+                            <div class="stat-value">${stats.total}</div>
+                            <div class="stat-label">Total Payouts</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" style="color: #10b981;">${stats.completed}</div>
+                            <div class="stat-label">Completed</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" style="color: #f59e0b;">${stats.pending}</div>
+                            <div class="stat-label">Pending</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" style="color: #ef4444;">${stats.failed}</div>
+                            <div class="stat-label">Failed</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">${stats.totalAmount.toFixed(2)}</div>
+                            <div class="stat-label">Total Completed Amount</div>
+                        </div>
+                    </div>
+
+                    <div class="overview-section">
+                        <div class="overview-section-title">
+                            <span>💰</span> Recent Payouts (${payouts.length})
+                        </div>
+                        ${renderPayoutsTable(payouts)}
+                    </div>
+                `;
+            } catch (error) {
+                content.innerHTML = `
+                    <div class="overview-empty" style="color: var(--error);">
+                        <div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>
+                        <div>Error loading payouts: ${error.message}</div>
+                    </div>`;
+            }
+        }
+
+        function renderPayoutsTable(payouts) {
+            if (!payouts || payouts.length === 0) {
+                return `<div class="overview-empty" style="padding: 20px;">No payouts created yet</div>`;
+            }
+
+            return `
+                <table class="overview-table">
+                    <thead>
+                        <tr>
+                            <th>External ID</th>
+                            <th>Amount</th>
+                            <th>Bank Account</th>
+                            <th>Purpose</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${payouts.map(p => `
+                            <tr>
+                                <td>
+                                    <div style="font-weight: 500; color: var(--text-primary);">${p.external_id || 'N/A'}</div>
+                                    <div style="font-size: 11px; color: var(--text-muted);">${p.environment}${p.payout_id ? ' • ' + p.payout_id.substring(0, 12) + '...' : ''}</div>
+                                </td>
+                                <td>
+                                    <div style="font-weight: 500;">${p.currency} ${p.amount}</div>
+                                    <div style="font-size: 11px; color: var(--text-muted);">${p.country}</div>
+                                </td>
+                                <td style="font-size: 12px;">${(p.bank_account || 'N/A').substring(0, 15)}...</td>
+                                <td style="font-size: 12px;">${p.purpose || 'N/A'}</td>
+                                <td>${renderStatusChip(p.status)}</td>
+                                <td>
+                                    <div class="action-btns">
+                                        <button class="action-btn" onclick="deleteLocalPayout(${p.id})" title="Delete">🗑️</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        async function deleteLocalPayout(payoutId) {
+            if (!confirm('Delete this payout from local storage?')) return;
+
+            try {
+                await fetch(`/api/local/payouts/${payoutId}`, { method: 'DELETE' });
+                showToast('success', 'Payout deleted');
+                loadPayoutsOverview();
+            } catch (error) {
+                showToast('error', 'Failed to delete');
+            }
+        }
+
+        async function refreshPayoutsOverview() {
+            showToast('info', 'Refreshing payouts...');
+            await loadPayoutsOverview();
+            showToast('success', 'Payouts refreshed');
         }
 
         function populateVerificationDropdowns() {
@@ -4113,6 +4274,12 @@ headers = {
                 : (result.error || `Error (${result.status_code})`);
 
             document.getElementById('payoutResponseJson').innerHTML = syntaxHighlight(result);
+            
+            // Reload payouts overview if payout was saved locally
+            if (result.success && result.saved_locally) {
+                showToast('success', 'Payout saved locally!');
+                loadPayoutsOverview();
+            }
         }
 
         function copyPayoutResponse() {
@@ -4317,7 +4484,7 @@ headers = {
             });
             
             // Reset form fields
-            document.getElementById('payout_external_id').value = 'test-payout-' + Date.now();
+            document.getElementById('payout_external_id').value = 'PAYOUT-' + Date.now();
             document.getElementById('payout_bank_code').value = '0';
             document.getElementById('payout_bank_name').value = '';
             document.getElementById('payout_bank_province').value = '';
@@ -4945,7 +5112,11 @@ headers = {
         loadSavedVerifications();
         loadSavedPayments(); // Load saved payments for dropdowns
         loadPaymentsOverview(); // Load payments on startup
+        loadPayoutsOverview(); // Load payouts on startup
         toggleSandboxElements(); // Initialize sandbox UI elements visibility
+        
+        // Set initial external_id for payout
+        document.getElementById('payout_external_id').value = 'PAYOUT-' + Date.now();
 
         // Environment selector
         document.querySelectorAll('.env-option').forEach(opt => {
@@ -4969,6 +5140,7 @@ headers = {
                 if (this.dataset.page === 'overview') {
                     loadOverview();
                     loadPaymentsOverview();
+                    loadPayoutsOverview();
                 }
                 
                 // Load payment parties when navigating to payment page
@@ -4980,6 +5152,10 @@ headers = {
                 if (this.dataset.page === 'payouts') {
                     loadPayoutParties();
                     updatePayoutPreview();
+                    // Generate new external_id if current one is empty
+                    if (!document.getElementById('payout_external_id').value) {
+                        document.getElementById('payout_external_id').value = 'PAYOUT-' + Date.now();
+                    }
                 }
             });
         });

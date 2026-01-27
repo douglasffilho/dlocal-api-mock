@@ -103,6 +103,8 @@ headers = {
 | GET | `/api/local/beneficiaries/approved` | Get approved beneficiaries |
 | GET | `/api/local/payments` | List all saved payments |
 | DELETE | `/api/local/payments/<id>` | Delete payment by local ID |
+| GET | `/api/local/payouts` | List all saved payouts |
+| DELETE | `/api/local/payouts/<id>` | Delete payout by local ID |
 
 ### KYC Verification Endpoints
 
@@ -182,13 +184,36 @@ class Payment(db.Model):
     raw_response            # Full API response (JSON)
 ```
 
+### Payout
+
+```python
+class Payout(db.Model):
+    id                      # Primary key
+    external_id             # Merchant external ID (unique - main identifier)
+    payout_id               # dLocal payout ID from API response
+    amount                  # Payout amount
+    currency                # Payout currency
+    country                 # Payout country
+    bank_account            # Bank account number
+    status                  # COMPLETED, PENDING, FAILED, etc.
+    status_detail           # Detailed status description
+    remitter_user_id        # KYC remitter ID
+    beneficiary_user_id     # KYC beneficiary ID
+    purpose                 # Purpose code
+    environment             # sandbox or production
+    created_at              # Timestamp
+    raw_response            # Full API response (JSON)
+```
+
+**Note:** Payouts are identified primarily by `external_id` (the ID you provide when creating the payout), not by the API's response ID.
+
 ---
 
 ## Frontend Structure
 
 ### Pages/Tabs
 
-1. **Overview** - Dashboard showing verification and payment statistics with ability to refresh statuses
+1. **Overview** - Dashboard showing verification, payment, and payout statistics with ability to refresh statuses
 2. **Create** - Create new Remitter or Beneficiary verifications
 3. **Get Details** - Retrieve verification status and details
 4. **Documents** - View required documents for a verification
@@ -502,7 +527,8 @@ requests==2.32.5
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | Jan 2026 | Initial release with KYC, Payments |
-| 1.1 | Jan 2026 | Added Payouts section |
+| 1.1 | Jan 2026 | Added Payouts section, Payment Status tab |
+| 1.2 | Jan 2026 | Added Payouts Overview to dashboard |
 
 ---
 
