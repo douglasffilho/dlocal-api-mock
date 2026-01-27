@@ -2265,13 +2265,15 @@
                                         </div>
                                         <div class="form-group">
                                             <label>Bank Account <span class="required">*</span></label>
-                                            <input type="text" id="payout_bank_account" placeholder="0000076500000035601368" value="0000076500000035601368">
+                                            <input type="text" id="payout_bank_account" placeholder="0000076500000035601368 or alias" value="0000076500000035601368">
+                                            <small style="color: var(--text-muted); font-size: 11px;">CBU/CVU: 22 digits | Alias: 6-20 alphanumeric</small>
                                         </div>
                                         <div class="form-group">
                                             <label>Account Type</label>
                                             <select id="payout_account_type">
-                                                <option value="C" selected>C - Checking</option>
-                                                <option value="S">S - Savings</option>
+                                                <option value="C" selected>C - Checking (CBU/CVU)</option>
+                                                <option value="S">S - Savings (CBU/CVU)</option>
+                                                <option value="ALIAS">ALIAS - Alias Account</option>
                                             </select>
                                         </div>
                                     </div>
@@ -2384,23 +2386,30 @@
                                             <input type="url" id="payout_notification_url" placeholder="https://dlocal-webhook.example.com.br" value="https://dlocal-webhook.example.com.br">
                                         </div>
                                         <div class="form-group">
-                                            <label>Beneficiary Name</label>
-                                            <input type="text" id="payout_beneficiary_name" placeholder="John Doe">
+                                            <label>Beneficiary First Name (AR Required)</label>
+                                            <input type="text" id="payout_beneficiary_name" placeholder="John" maxlength="50">
+                                            <small style="color: var(--text-muted); font-size: 11px;">Max 50 chars - Required for Argentina</small>
                                         </div>
                                         <div class="form-group">
-                                            <label>Beneficiary Document</label>
-                                            <input type="text" id="payout_beneficiary_document" placeholder="12345678">
+                                            <label>Beneficiary Last Name (AR Required)</label>
+                                            <input type="text" id="payout_beneficiary_lastname" placeholder="Doe" maxlength="50">
+                                            <small style="color: var(--text-muted); font-size: 11px;">Max 50 chars - Required for Argentina</small>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Beneficiary Document (AR Required)</label>
+                                            <input type="text" id="payout_beneficiary_document" placeholder="20374115295" maxlength="11">
+                                            <small style="color: var(--text-muted); font-size: 11px;">CUIT/CUIL: 11 numeric digits (Argentina)</small>
                                         </div>
                                         <div class="form-group">
                                             <label>Beneficiary Document Type</label>
                                             <select id="payout_beneficiary_document_type">
                                                 <option value="">Select...</option>
+                                                <option value="CUIT">CUIT (Argentina)</option>
+                                                <option value="CUIL">CUIL (Argentina)</option>
                                                 <option value="DNI">DNI</option>
-                                                <option value="CUIT">CUIT</option>
-                                                <option value="CUIL">CUIL</option>
-                                                <option value="CPF">CPF</option>
-                                                <option value="CNPJ">CNPJ</option>
-                                                <option value="RUT">RUT</option>
+                                                <option value="CPF">CPF (Brazil)</option>
+                                                <option value="CNPJ">CNPJ (Brazil)</option>
+                                                <option value="RUT">RUT (Chile)</option>
                                                 <option value="CC">CC</option>
                                                 <option value="CE">CE</option>
                                             </select>
@@ -2408,6 +2417,25 @@
                                     </div>
                                 </div>
                             </div>
+                        </div>
+
+                        <!-- Country Requirements Info -->
+                        <div class="info-box mt-4">
+                            <strong>🇦🇷 Argentina Payout Requirements</strong>
+                            <p class="mt-2">For Argentina (AR) payouts, the following fields are <strong>mandatory</strong>:</p>
+                            <ul style="margin-top: 8px; padding-left: 20px;">
+                                <li><strong>Beneficiary First Name</strong> (max 50 chars)</li>
+                                <li><strong>Beneficiary Last Name</strong> (max 50 chars)</li>
+                                <li><strong>Beneficiary Document</strong> (CUIT/CUIL - 11 numeric digits)</li>
+                            </ul>
+                            <p class="mt-2"><strong>Bank Account Format:</strong></p>
+                            <ul style="margin-top: 4px; padding-left: 20px;">
+                                <li>CBU/CVU: 22 numeric digits (account_type: C or S)</li>
+                                <li>Alias: 6-20 alphanumeric characters with . and - allowed (account_type: ALIAS)</li>
+                            </ul>
+                            <p class="mt-2" style="font-size: 12px; color: var(--text-muted);">
+                                Reference: <a href="https://docs.dlocal.com/docs/argentina-payouts" target="_blank" style="color: var(--accent-primary);">dLocal Argentina Payouts Documentation</a>
+                            </p>
                         </div>
 
                         <div class="actions-bar">
@@ -2901,10 +2929,41 @@ headers = {
     "beneficiary_user_id": "KV-xxxxx-xxxx-xxxx",
     "subpurpose": "EPREFA",
     "source_of_funds": "SAVINGS",
-    "signature": true
+    "signature": true,
+    "beneficiary_name": "John",
+    "beneficiary_lastname": "Doe",
+    "beneficiary_document": "20374115295"
 }</pre>
 
-                            <h4>Required Headers</h4>
+                            <h4>📊 Response Status Codes</h4>
+                            <table class="docs-table">
+                                <thead><tr><th>API Status</th><th>Mapped Status</th><th>Description</th></tr></thead>
+                                <tbody>
+                                    <tr><td>0</td><td>SUCCESS</td><td>Payout successful</td></tr>
+                                    <tr><td>Other values</td><td>FAILED</td><td>Payout failed (check message)</td></tr>
+                                </tbody>
+                            </table>
+                            <p style="margin-top: 8px; font-size: 12px; color: var(--text-muted);">
+                                The <code>cashout_id</code> from the response is stored as <code>payout_id</code>.
+                            </p>
+
+                            <h4 style="margin-top: 16px;">🇦🇷 Argentina Mandatory Fields</h4>
+                            <table class="docs-table">
+                                <thead><tr><th>Field</th><th>Description</th><th>Format</th></tr></thead>
+                                <tbody>
+                                    <tr><td>beneficiary_name</td><td>First name</td><td>Max 50 chars</td></tr>
+                                    <tr><td>beneficiary_lastname</td><td>Last name</td><td>Max 50 chars</td></tr>
+                                    <tr><td>beneficiary_document</td><td>CUIT/CUIL</td><td>11 numeric digits</td></tr>
+                                </tbody>
+                            </table>
+
+                            <h4 style="margin-top: 16px;">Bank Account Formats (Argentina)</h4>
+                            <ul style="padding-left: 20px; margin-top: 8px;">
+                                <li><strong>CBU/CVU:</strong> 22 numeric digits (account_type: "C" or "S")</li>
+                                <li><strong>Alias:</strong> 6-20 alphanumeric with . and - (account_type: "ALIAS")</li>
+                            </ul>
+
+                            <h4 style="margin-top: 16px;">Required Headers</h4>
                             <table class="docs-table">
                                 <thead><tr><th>Header</th><th>Value</th></tr></thead>
                                 <tbody>
@@ -3446,10 +3505,10 @@ headers = {
 
                 const stats = {
                     total: payouts.length,
-                    completed: payouts.filter(p => p.status === 'COMPLETED' || p.status === 'SUCCESS').length,
+                    completed: payouts.filter(p => p.status === 'SUCCESS' || p.status === 'COMPLETED').length,
                     pending: payouts.filter(p => p.status === 'PENDING' || p.status === 'PROCESSING').length,
-                    failed: payouts.filter(p => p.status === 'REJECTED' || p.status === 'FAILED' || p.status === 'ERROR').length,
-                    totalAmount: payouts.filter(p => p.status === 'COMPLETED' || p.status === 'SUCCESS').reduce((sum, p) => sum + (p.amount || 0), 0)
+                    failed: payouts.filter(p => p.status === 'FAILED' || p.status === 'REJECTED' || p.status === 'ERROR').length,
+                    totalAmount: payouts.filter(p => p.status === 'SUCCESS' || p.status === 'COMPLETED').reduce((sum, p) => sum + (p.amount || 0), 0)
                 };
 
                 content.innerHTML = `
@@ -3536,14 +3595,30 @@ headers = {
         }
 
         async function deleteLocalPayout(payoutId) {
+            console.log('Attempting to delete payout with ID:', payoutId);
+            
             if (!confirm('Delete this payout from local storage?')) return;
 
             try {
-                await fetch(`/api/local/payouts/${payoutId}`, { method: 'DELETE' });
-                showToast('success', 'Payout deleted');
+                const url = `/api/local/payouts/${payoutId}`;
+                console.log('DELETE request to:', url);
+                
+                const response = await fetch(url, { method: 'DELETE' });
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ message: response.statusText }));
+                    console.error('Delete failed:', errorData);
+                    throw new Error(errorData.error || errorData.message || `HTTP ${response.status}`);
+                }
+                
+                const result = await response.json();
+                console.log('Delete successful:', result);
+                showToast('success', result.message || 'Payout deleted');
                 loadPayoutsOverview();
             } catch (error) {
-                showToast('error', 'Failed to delete');
+                console.error('Delete payout error:', error);
+                showToast('error', `Failed to delete: ${error.message}`);
             }
         }
 
@@ -4242,6 +4317,7 @@ headers = {
                 source_of_funds: document.getElementById('payout_source_of_funds').value,
                 notification_url: document.getElementById('payout_notification_url').value,
                 beneficiary_name: document.getElementById('payout_beneficiary_name').value,
+                beneficiary_lastname: document.getElementById('payout_beneficiary_lastname').value,
                 beneficiary_document: document.getElementById('payout_beneficiary_document').value,
                 beneficiary_document_type: document.getElementById('payout_beneficiary_document_type').value,
             };
@@ -4492,6 +4568,7 @@ headers = {
             document.getElementById('payout_amount').value = '100.00';
             document.getElementById('payout_notification_url').value = 'https://dlocal-webhook.example.com.br';
             document.getElementById('payout_beneficiary_name').value = '';
+            document.getElementById('payout_beneficiary_lastname').value = '';
             document.getElementById('payout_beneficiary_document').value = '';
             
             // Reset response
@@ -4509,7 +4586,8 @@ headers = {
                 'payout_external_id', 'payout_country', 'payout_bank_code',
                 'payout_bank_name', 'payout_bank_province', 'payout_bank_account', 'payout_account_type',
                 'payout_amount', 'payout_currency', 'payout_purpose', 'payout_remitter_user_id',
-                'payout_beneficiary_user_id', 'payout_subpurpose', 'payout_source_of_funds'
+                'payout_beneficiary_user_id', 'payout_subpurpose', 'payout_source_of_funds',
+                'payout_beneficiary_name', 'payout_beneficiary_lastname', 'payout_beneficiary_document'
             ];
             
             payoutFields.forEach(id => {

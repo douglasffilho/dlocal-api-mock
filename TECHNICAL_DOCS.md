@@ -190,13 +190,13 @@ class Payment(db.Model):
 class Payout(db.Model):
     id                      # Primary key
     external_id             # Merchant external ID (unique - main identifier)
-    payout_id               # dLocal payout ID from API response
+    payout_id               # cashout_id from dLocal API response
     amount                  # Payout amount
     currency                # Payout currency
     country                 # Payout country
     bank_account            # Bank account number
-    status                  # COMPLETED, PENDING, FAILED, etc.
-    status_detail           # Detailed status description
+    status                  # SUCCESS, FAILED, PENDING
+    status_detail           # Error message or status description
     remitter_user_id        # KYC remitter ID
     beneficiary_user_id     # KYC beneficiary ID
     purpose                 # Purpose code
@@ -205,7 +205,10 @@ class Payout(db.Model):
     raw_response            # Full API response (JSON)
 ```
 
-**Note:** Payouts are identified primarily by `external_id` (the ID you provide when creating the payout), not by the API's response ID.
+**Note:** 
+- Payouts are identified primarily by `external_id` (the ID you provide when creating the payout)
+- `payout_id` stores the `cashout_id` returned by the dLocal API
+- `status` is mapped from API numeric codes: 0 = SUCCESS, others = FAILED
 
 ---
 
@@ -409,9 +412,39 @@ Content-Type: application/json
     "beneficiary_user_id": "KV-xxxxx",
     "subpurpose": "EPREFA",
     "source_of_funds": "SAVINGS",
-    "signature": true
+    "signature": true,
+    "beneficiary_name": "John",
+    "beneficiary_lastname": "Doe",
+    "beneficiary_document": "20374115295"
 }
 ```
+
+**Response Status Codes**
+
+The dLocal Payouts V2 API uses numeric status codes in the response:
+
+| API Status | Mapped Status | Description |
+|------------|---------------|-------------|
+| 0 | SUCCESS | Payout successful |
+| Any other | FAILED | Payout failed (see message for details) |
+
+The `cashout_id` from the response is stored as `payout_id` in the database.
+
+**Argentina-Specific Requirements**
+
+For Argentina (country code: AR), the following additional fields are **mandatory**:
+
+| Field | Description | Format |
+|-------|-------------|--------|
+| beneficiary_name | First name of beneficiary | Max 50 characters |
+| beneficiary_lastname | Last name of beneficiary | Max 50 characters |
+| beneficiary_document | CUIT or CUIL document | 11 numeric digits |
+
+**Bank Account Formats for Argentina:**
+- **CBU/CVU**: 22 numeric digits (use account_type: "C" or "S")
+- **Alias**: 6-20 alphanumeric characters with `.` and `-` allowed (use account_type: "ALIAS")
+
+Reference: [dLocal Argentina Payouts Documentation](https://docs.dlocal.com/docs/argentina-payouts) | [dLocal Payouts V2 API](https://docs.dlocal.com/reference/requesting-payout)
 
 ---
 
@@ -529,6 +562,8 @@ requests==2.32.5
 | 1.0 | Jan 2026 | Initial release with KYC, Payments |
 | 1.1 | Jan 2026 | Added Payouts section, Payment Status tab |
 | 1.2 | Jan 2026 | Added Payouts Overview to dashboard |
+| 1.3 | Jan 2026 | Updated Payouts form with Argentina-specific requirements |
+| 1.4 | Jan 2026 | Fixed payout status mapping (0=SUCCESS, others=FAILED) and cashout_id storage |
 
 ---
 

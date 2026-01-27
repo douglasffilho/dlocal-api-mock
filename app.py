@@ -387,17 +387,34 @@ def delete_payment_by_id(id):
 @app.route("/api/local/payouts", methods=["GET"])
 def list_payouts():
     """List all saved payouts."""
-    payouts = Payout.query.order_by(Payout.created_at.desc()).all()
-    return jsonify([p.to_dict() for p in payouts])
+    try:
+        payouts = Payout.query.order_by(Payout.created_at.desc()).all()
+        result = [p.to_dict() for p in payouts]
+        print(f"Returning {len(result)} payouts")
+        if result:
+            print(f"Sample payout ID: {result[0].get('id')}")
+        return jsonify(result)
+    except Exception as e:
+        print(f"Error listing payouts: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/local/payouts/<int:id>", methods=["DELETE"])
 def delete_payout_by_id(id):
     """Delete a saved payout by local ID."""
-    payout = Payout.query.get_or_404(id)
-    db.session.delete(payout)
-    db.session.commit()
-    return jsonify({"success": True, "message": "Payout deleted"})
+    try:
+        payout = Payout.query.get(id)
+        if not payout:
+            return jsonify({"success": False, "error": "Payout not found"}), 404
+        
+        db.session.delete(payout)
+        db.session.commit()
+        print(f"Successfully deleted payout with ID: {id}")
+        return jsonify({"success": True, "message": "Payout deleted"})
+    except Exception as e:
+        print(f"Error deleting payout {id}: {str(e)}")
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 # ============================================
@@ -1135,6 +1152,8 @@ def create_payout():
         body["notification_url"] = payout_data.get("notification_url")
     if payout_data.get("beneficiary_name"):
         body["beneficiary_name"] = payout_data.get("beneficiary_name")
+    if payout_data.get("beneficiary_lastname"):
+        body["beneficiary_lastname"] = payout_data.get("beneficiary_lastname")
     if payout_data.get("beneficiary_document"):
         body["beneficiary_document"] = payout_data.get("beneficiary_document")
     if payout_data.get("beneficiary_document_type"):
@@ -1187,8 +1206,12 @@ def create_payout():
         except:
             response_json = {"raw": response.text}
         
+        # dLocal Payouts V2 API: status 0 = success, all others = failure
+        api_status = response_json.get("status") if isinstance(response_json, dict) else None
+        is_success = response.ok and api_status == 0
+        
         result = {
-            "success": response.ok,
+            "success": is_success,
             "status_code": response.status_code,
             "response": response_json,
             "response_headers": dict(response.headers),
@@ -1196,72 +1219,76 @@ def create_payout():
             "url": url
         }
         
-        # Save successful payout to database
-        if response.ok:
-            external_id = payout_data.get("external_id")
-            
-            if external_id:
-                try:
-                    # Extract payout_id from response if available
-                    api_payout_id = None
-                    if response_json and isinstance(response_json, dict):
-                        api_payout_id = (response_json.get("id") or 
-                                       response_json.get("payout_id") or 
-                                       response_json.get("payment_id") or
-                                       response_json.get("cashout_id") or
-                                       response_json.get("transaction_id"))
-                    
-                    print(f"Attempting to save payout with external_id: {external_id}")
-                    if api_payout_id:
-                        print(f"API returned payout_id: {api_payout_id}")
-                    if response_json and isinstance(response_json, dict):
-                        print(f"Response keys: {list(response_json.keys())}")
-                    
-                    # Check if payout already exists by external_id
-                    existing = Payout.query.filter_by(external_id=external_id).first()
-                    
-                    if existing:
-                        # Update existing payout
-                        if api_payout_id:
-                            existing.payout_id = api_payout_id
-                        if response_json and isinstance(response_json, dict):
-                            existing.status = response_json.get("status", existing.status)
-                            existing.status_detail = response_json.get("status_detail", existing.status_detail)
-                            existing.raw_response = json.dumps(response_json)
-                        payout = existing
-                        print(f"Updated existing payout: {external_id}")
-                    else:
-                        # Create new payout record
-                        payout = Payout(
-                            external_id=external_id,
-                            payout_id=api_payout_id,
-                            amount=float(payout_data.get("amount", "0.00")),
-                            currency=payout_data.get("currency"),
-                            country=payout_data.get("country"),
-                            bank_account=payout_data.get("bank_account"),
-                            status=response_json.get("status", "PENDING") if response_json and isinstance(response_json, dict) else "PENDING",
-                            status_detail=response_json.get("status_detail", "") if response_json and isinstance(response_json, dict) else "",
-                            remitter_user_id=payout_data.get("remitter_user_id"),
-                            beneficiary_user_id=payout_data.get("beneficiary_user_id"),
-                            purpose=payout_data.get("purpose"),
-                            environment="sandbox" if use_sandbox else "production",
-                            raw_response=json.dumps(response_json) if response_json else "{}"
-                        )
-                        db.session.add(payout)
-                        print(f"Created new payout: {external_id}")
-                    
-                    db.session.commit()
-                    result["saved_locally"] = True
-                    result["local_id"] = payout.id
-                    print(f"Payout saved successfully with local ID: {payout.id}")
-                except Exception as e:
-                    print(f"Error saving payout to database: {str(e)}")
-                    import traceback
-                    traceback.print_exc()
-                    db.session.rollback()
-                    result["save_error"] = str(e)
-            else:
-                print("No external_id provided, cannot save payout")
+        # Save payout to database (both success and failure for tracking)
+        external_id = payout_data.get("external_id")
+        
+        if external_id and response_json and isinstance(response_json, dict):
+            try:
+                # Extract cashout_id from response
+                cashout_id = response_json.get("cashout_id")
+                
+                # Map numeric status to human-readable format
+                # Status 0 = SUCCESS, others = FAILED
+                if api_status == 0:
+                    status_text = "SUCCESS"
+                elif api_status is not None:
+                    status_text = "FAILED"
+                else:
+                    status_text = "PENDING"
+                
+                # Get status detail/message
+                status_detail = response_json.get("message", "") or response_json.get("status_detail", "")
+                
+                print(f"Attempting to save payout with external_id: {external_id}")
+                print(f"API status code: {api_status} -> {status_text}")
+                if cashout_id:
+                    print(f"API returned cashout_id: {cashout_id}")
+                print(f"Response keys: {list(response_json.keys())}")
+                
+                # Check if payout already exists by external_id
+                existing = Payout.query.filter_by(external_id=external_id).first()
+                
+                if existing:
+                    # Update existing payout
+                    if cashout_id:
+                        existing.payout_id = cashout_id
+                    existing.status = status_text
+                    existing.status_detail = status_detail
+                    existing.raw_response = json.dumps(response_json)
+                    payout = existing
+                    print(f"Updated existing payout: {external_id}")
+                else:
+                    # Create new payout record
+                    payout = Payout(
+                        external_id=external_id,
+                        payout_id=cashout_id,
+                        amount=float(payout_data.get("amount", "0.00")),
+                        currency=payout_data.get("currency"),
+                        country=payout_data.get("country"),
+                        bank_account=payout_data.get("bank_account"),
+                        status=status_text,
+                        status_detail=status_detail,
+                        remitter_user_id=payout_data.get("remitter_user_id"),
+                        beneficiary_user_id=payout_data.get("beneficiary_user_id"),
+                        purpose=payout_data.get("purpose"),
+                        environment="sandbox" if use_sandbox else "production",
+                        raw_response=json.dumps(response_json)
+                    )
+                    db.session.add(payout)
+                    print(f"Created new payout: {external_id}")
+                
+                db.session.commit()
+                result["saved_locally"] = True
+                result["local_id"] = payout.id
+                print(f"Payout saved successfully with local ID: {payout.id}, status: {status_text}")
+            except Exception as e:
+                print(f"Error saving payout to database: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                db.session.rollback()
+                result["save_error"] = str(e)
+        else:
+            print("No external_id provided or invalid response, cannot save payout")
         
         return jsonify(result)
     except requests.exceptions.RequestException as e:
