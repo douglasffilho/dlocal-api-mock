@@ -493,7 +493,7 @@ Reference: [dLocal Argentina Payouts Documentation](https://docs.dlocal.com/docs
 
 ```bash
 # Clone or navigate to project
-cd kyc-verification
+cd dlocal-api-mock
 
 # Create virtual environment
 python -m venv venv
@@ -509,9 +509,6 @@ pip install -r requirements.txt
 ### Running
 
 ```bash
-# Activate virtual environment
-source venv/bin/activate
-
 # Run Flask app
 python app.py
 ```
