@@ -116,6 +116,7 @@ headers = {
 | POST | `/api/verifications/<verification_id>/documents/<document_id>` | Upload document |
 | PATCH | `/api/verifications/<verification_id>/state` | Update verification state (Sandbox only) |
 | POST | `/api/payments/<payment_id>` | Get payment details |
+| GET | `/api/payouts/<external_id>` | Get payout details by external_id |
 
 ### Payment Endpoints
 
@@ -225,7 +226,8 @@ class Payout(db.Model):
 7. **Payment** - Create remittance payments
 8. **Payment Status** - View detailed payment status and information
 9. **Payouts** - Create payouts/cashouts
-10. **Docs** - API documentation and examples
+10. **Payout Details** - View detailed payout information by external_id
+11. **Docs** - API documentation and examples
 
 ### Credential Management
 
@@ -564,6 +566,7 @@ requests==2.32.5
 | 1.2 | Jan 2026 | Added Payouts Overview to dashboard |
 | 1.3 | Jan 2026 | Updated Payouts form with Argentina-specific requirements |
 | 1.4 | Jan 2026 | Fixed payout status mapping (0=SUCCESS, others=FAILED) and cashout_id storage |
+| 1.5 | Jan 2026 | Added Payout Details page to view payout information by external_id |
 
 ---
 

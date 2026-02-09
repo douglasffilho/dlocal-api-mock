@@ -1121,6 +1121,7 @@
                 <button class="nav-tab" data-page="payment">💸 Payment</button>
                 <button class="nav-tab" data-page="payment-status">📊 Payment Status</button>
                 <button class="nav-tab" data-page="payouts">🏦 Payouts</button>
+                <button class="nav-tab" data-page="payout-details">🔍 Payout Details</button>
                 <button class="nav-tab" data-page="docs">📚 Docs</button>
             </nav>
         </header>
@@ -2578,6 +2579,98 @@
         </div>
 
         <!-- ============================================ -->
+        <!-- PAYOUT DETAILS PAGE -->
+        <!-- ============================================ -->
+        <div class="page-view" id="page-payout-details">
+            <div class="main-grid">
+                <div class="form-column">
+                    <!-- Select Payout -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-icon">🏦</div>
+                            <h2 class="card-title">Select Payout</h2>
+                        </div>
+
+                        <div class="form-grid cols-1">
+                            <div class="form-group">
+                                <label>Saved Payouts</label>
+                                <select id="payout_details_payout_select" onchange="selectPayout('payout_details')">
+                                    <option value="">-- Select a payout --</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>External ID <span class="required">*</span></label>
+                                <input type="text" id="payout_details_external_id" placeholder="PAYOUT-xxxxx-xxxx">
+                            </div>
+                        </div>
+
+                        <button class="btn btn-primary w-full" onclick="getPayoutDetails()">
+                            <span>🔍 Get Payout Details</span>
+                        </button>
+                    </div>
+
+                    <!-- Info Box -->
+                    <div class="info-box mt-4">
+                        <strong>🔍 Payout Details Information</strong>
+                        <p class="mt-2">Retrieve detailed payout information including:</p>
+                        <ul style="margin-top: 8px; padding-left: 20px;">
+                            <li>Payout status (SUCCESS, FAILED, PENDING)</li>
+                            <li>External ID and Cashout ID</li>
+                            <li>Transaction amounts and currency</li>
+                            <li>Bank account information</li>
+                            <li>Beneficiary and remitter details</li>
+                            <li>Purpose and country information</li>
+                            <li>Creation timestamp</li>
+                            <li>Full API response data</li>
+                        </ul>
+                        <p class="mt-2" style="font-size: 12px; color: var(--text-muted);">
+                            Payout details are fetched from the local database using the external_id as the identifier.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Response Panel -->
+                <div class="response-column">
+                    <div class="card" style="position: sticky; top: 24px;">
+                        <div class="card-header">
+                            <div class="card-icon">📡</div>
+                            <h2 class="card-title">Payout Details</h2>
+                        </div>
+                        <div class="response-panel">
+                            <div class="empty-state" id="payoutDetailsEmptyState">
+                                <div class="empty-state-icon">🏦</div>
+                                <div class="empty-state-text">Select a payout and click "Get Payout Details"</div>
+                            </div>
+                            <div id="payoutDetailsContent" style="display: none;">
+                                <div class="response-header">
+                                    <div class="response-status" id="payoutDetailsResponseStatus">
+                                        <span class="status-dot pending"></span>
+                                        <span>Waiting...</span>
+                                    </div>
+                                    <button class="btn btn-secondary text-sm" onclick="copyPayoutDetails()">Copy JSON</button>
+                                </div>
+                                
+                                <!-- Payout Details Summary -->
+                                <div id="payoutDetailsSummary" style="margin-bottom: 20px; padding: 16px; background: var(--bg-secondary); border-radius: 8px;"></div>
+                                
+                                <!-- Full JSON Response -->
+                                <div class="response-body">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                        <strong style="color: var(--text-primary); font-size: 13px;">Full Response:</strong>
+                                        <button class="btn btn-secondary text-sm" onclick="togglePayoutJson()">
+                                            <span id="togglePayoutJsonText">Show JSON</span>
+                                        </button>
+                                    </div>
+                                    <pre id="payoutDetailsJson" style="display: none;"></pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================ -->
         <!-- DOCS PAGE -->
         <!-- ============================================ -->
         <div class="page-view" id="page-docs">
@@ -2995,6 +3088,7 @@ headers = {
                                     <tr><td><span class="method-badge post">POST</span></td><td>/api/payments</td><td>Create payment (proxy to dLocal)</td></tr>
                                     <tr><td><span class="method-badge post">POST</span></td><td>/api/payments/{id}</td><td>Get payment details (proxy to dLocal)</td></tr>
                                     <tr><td><span class="method-badge post">POST</span></td><td>/api/payouts</td><td>Create payout (proxy to dLocal)</td></tr>
+                                    <tr><td><span class="method-badge get">GET</span></td><td>/api/payouts/{external_id}</td><td>Get payout details by external_id</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -3616,6 +3710,7 @@ headers = {
                 console.log('Delete successful:', result);
                 showToast('success', result.message || 'Payout deleted');
                 loadPayoutsOverview();
+                loadSavedPayouts(); // Update dropdowns
             } catch (error) {
                 console.error('Delete payout error:', error);
                 showToast('error', `Failed to delete: ${error.message}`);
@@ -3699,6 +3794,40 @@ headers = {
                     const option = document.createElement('option');
                     option.value = p.payment_id;
                     option.textContent = `${p.payment_id.substring(0, 20)}... - ${p.status} - ${p.currency} ${p.amount}`;
+                    option.dataset.env = p.environment;
+                    select.appendChild(option);
+                });
+                
+                if (currentValue) select.value = currentValue;
+            });
+        }
+
+        let savedPayoutsForDropdown = [];
+
+        async function loadSavedPayouts() {
+            try {
+                const response = await fetch('/api/local/payouts');
+                savedPayoutsForDropdown = await response.json();
+                populatePayoutDropdowns();
+            } catch (error) {
+                console.error('Error loading payouts:', error);
+            }
+        }
+
+        function populatePayoutDropdowns() {
+            // Populate all payout dropdowns
+            ['payout_details'].forEach(prefix => {
+                const select = document.getElementById(`${prefix}_payout_select`);
+                if (!select) return;
+                
+                const currentValue = select.value;
+                select.innerHTML = '<option value="">-- Select a payout --</option>';
+                
+                savedPayoutsForDropdown.forEach(p => {
+                    const option = document.createElement('option');
+                    option.value = p.external_id;
+                    const displayId = p.external_id && p.external_id.length > 25 ? p.external_id.substring(0, 25) + '...' : p.external_id;
+                    option.textContent = `${displayId} - ${p.status} - ${p.currency} ${p.amount}`;
                     option.dataset.env = p.environment;
                     select.appendChild(option);
                 });
@@ -4355,6 +4484,7 @@ headers = {
             if (result.success && result.saved_locally) {
                 showToast('success', 'Payout saved locally!');
                 loadPayoutsOverview();
+                loadSavedPayouts(); // Update dropdowns
             }
         }
 
@@ -4534,6 +4664,146 @@ headers = {
         function togglePaymentJson() {
             const jsonEl = document.getElementById('paymentStatusJson');
             const toggleText = document.getElementById('togglePaymentJsonText');
+            
+            if (jsonEl.style.display === 'none') {
+                jsonEl.style.display = 'block';
+                toggleText.textContent = 'Hide JSON';
+            } else {
+                jsonEl.style.display = 'none';
+                toggleText.textContent = 'Show JSON';
+            }
+        }
+
+        // ============================================
+        // Payout Details Functions
+        // ============================================
+
+        function selectPayout(page) {
+            const selectId = `${page}_payout_select`;
+            const inputId = `${page}_external_id`;
+            const select = document.getElementById(selectId);
+            const input = document.getElementById(inputId);
+            
+            if (select.value) {
+                input.value = select.value;
+            }
+        }
+
+        async function getPayoutDetails() {
+            const externalId = document.getElementById('payout_details_external_id').value;
+            if (!externalId) {
+                showToast('error', 'Enter External ID');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/payouts/${externalId}`, {
+                    method: 'GET'
+                });
+                const result = await response.json();
+                displayPayoutDetails(result);
+            } catch (error) {
+                displayPayoutDetails({ success: false, error: error.message });
+            }
+        }
+
+        function displayPayoutDetails(result) {
+            document.getElementById('payoutDetailsEmptyState').style.display = 'none';
+            document.getElementById('payoutDetailsContent').style.display = 'block';
+
+            const statusEl = document.getElementById('payoutDetailsResponseStatus');
+            statusEl.querySelector('.status-dot').className = `status-dot ${result.success ? 'success' : 'error'}`;
+            statusEl.querySelector('span:last-child').textContent = result.success 
+                ? 'Payout Found' 
+                : (result.error || 'Error');
+
+            if (result.success && result.response) {
+                const payout = result.response;
+                
+                // Display summary
+                const summaryHtml = `
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+                        <div>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">External ID</div>
+                            <div style="font-weight: 600; color: var(--accent-primary); font-size: 13px;">${payout.external_id || 'N/A'}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Cashout ID</div>
+                            <div style="font-weight: 500; color: var(--text-primary); font-size: 13px;">${payout.payout_id || 'N/A'}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Status</div>
+                            <div>${renderStatusChip(payout.status)}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Amount</div>
+                            <div style="font-weight: 600; color: var(--accent-primary); font-size: 15px;">${payout.currency || ''} ${payout.amount || '0.00'}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Country</div>
+                            <div style="font-weight: 500; color: var(--text-primary); font-size: 13px;">${payout.country || 'N/A'}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Bank Account</div>
+                            <div style="font-weight: 500; color: var(--text-primary); font-size: 13px; font-family: monospace;">${payout.bank_account ? payout.bank_account.substring(0, 8) + '...' + payout.bank_account.substring(payout.bank_account.length - 4) : 'N/A'}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Purpose</div>
+                            <div style="font-weight: 500; color: var(--text-primary); font-size: 13px;">${payout.purpose || 'N/A'}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Environment</div>
+                            <div style="font-weight: 500; color: var(--text-primary); font-size: 13px; text-transform: capitalize;">${payout.environment || 'N/A'}</div>
+                        </div>
+                        ${payout.remitter_user_id ? `
+                        <div>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Remitter ID</div>
+                            <div style="font-weight: 500; color: var(--text-primary); font-size: 12px; font-family: monospace;">${payout.remitter_user_id}</div>
+                        </div>
+                        ` : ''}
+                        ${payout.beneficiary_user_id ? `
+                        <div>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Beneficiary ID</div>
+                            <div style="font-weight: 500; color: var(--text-primary); font-size: 12px; font-family: monospace;">${payout.beneficiary_user_id}</div>
+                        </div>
+                        ` : ''}
+                        <div>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Created At</div>
+                            <div style="font-weight: 500; color: var(--text-primary); font-size: 13px;">${payout.created_at ? new Date(payout.created_at).toLocaleString() : 'N/A'}</div>
+                        </div>
+                        ${payout.status_detail ? `
+                        <div style="grid-column: 1 / -1;">
+                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Status Detail</div>
+                            <div style="font-weight: 500; color: var(--text-primary); font-size: 13px;">${payout.status_detail}</div>
+                        </div>
+                        ` : ''}
+                    </div>
+                `;
+                
+                document.getElementById('payoutDetailsSummary').innerHTML = summaryHtml;
+                
+                // Display full JSON
+                const payoutJson = payout.raw_response ? JSON.parse(payout.raw_response) : payout;
+                document.getElementById('payoutDetailsJson').textContent = JSON.stringify(payoutJson, null, 2);
+            } else {
+                // Error state
+                document.getElementById('payoutDetailsSummary').innerHTML = `
+                    <div style="color: var(--error); padding: 12px; background: rgba(239, 68, 68, 0.1); border-radius: 6px;">
+                        <strong>Error:</strong> ${result.error || result.message || 'Unknown error'}
+                    </div>
+                `;
+                document.getElementById('payoutDetailsJson').textContent = JSON.stringify(result, null, 2);
+            }
+        }
+
+        function copyPayoutDetails() {
+            navigator.clipboard.writeText(document.getElementById('payoutDetailsJson').textContent);
+            showToast('success', 'Copied!');
+        }
+
+        function togglePayoutJson() {
+            const jsonEl = document.getElementById('payoutDetailsJson');
+            const toggleText = document.getElementById('togglePayoutJsonText');
             
             if (jsonEl.style.display === 'none') {
                 jsonEl.style.display = 'block';
@@ -5189,6 +5459,7 @@ headers = {
         loadLastProfile();
         loadSavedVerifications();
         loadSavedPayments(); // Load saved payments for dropdowns
+        loadSavedPayouts(); // Load saved payouts for dropdowns
         loadPaymentsOverview(); // Load payments on startup
         loadPayoutsOverview(); // Load payouts on startup
         toggleSandboxElements(); // Initialize sandbox UI elements visibility
